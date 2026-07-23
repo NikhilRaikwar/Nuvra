@@ -57,8 +57,8 @@ function FacetRow({
   return (
     <div className="grid grid-cols-1 gap-2 border-b border-border-dim py-3 last:border-b-0 sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span className="text-[10px] font-mono uppercase text-ink/40 tracking-widest">{label}</span>
-      <div className="min-w-0 overflow-x-auto pb-1 [scrollbar-width:thin]">
-        <div className="flex w-max min-w-full items-center gap-1.5 pr-3">
+      <div className="min-w-0 overflow-x-auto pb-1 overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:overflow-visible sm:pb-0">
+        <div className="flex w-max min-w-full items-center gap-1.5 pr-3 sm:w-auto sm:min-w-0 sm:flex-wrap sm:pr-0">
           <FacetButton
             label="All"
             count={allCount}
