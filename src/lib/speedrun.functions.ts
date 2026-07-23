@@ -97,6 +97,18 @@ const SearchInput = z.object({
 
 type SearchInput = z.infer<typeof SearchInput>;
 
+export type LiveJobSearch = {
+  jobs: Job[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  facets: SpeedrunFacets;
+  scope: "portfolio" | "everywhere";
+  beyondPortfolio: number;
+  source: string;
+};
+
 const IdInput = z.object({ id: z.string().trim().min(1).max(200) });
 
 function titleCase(value: string | null | undefined) {
@@ -177,48 +189,50 @@ export async function loadSpeedrunJob(id: string): Promise<Job> {
   return toJob(payload.job, payload.job);
 }
 
+export async function searchSpeedrunJobs(data: SearchInput): Promise<LiveJobSearch> {
+  const query: Record<string, string | number | undefined> = {
+    q: data.q,
+    fn: data.fn,
+    sen: data.sen,
+    emp: data.emp,
+    loc: data.loc,
+    remote: data.remote ? "1" : undefined,
+    comp: data.comp,
+    portfolio: data.portfolio,
+    cohort: data.cohort,
+    stealth: data.stealth,
+    scope: data.scope,
+    sort: data.sort,
+    page: data.page,
+  };
+  const payload = await apiRequest<{
+    jobs: RawJob[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+    facets: SpeedrunFacets;
+    scope?: "portfolio" | "everywhere";
+    beyond_portfolio?: number;
+    source?: string;
+  }>("/jobs", query);
+
+  return {
+    jobs: payload.jobs.map((job) => toJob(job)),
+    total: payload.total,
+    page: payload.page,
+    pageSize: payload.page_size,
+    totalPages: payload.total_pages,
+    facets: payload.facets,
+    scope: payload.scope || data.scope || "portfolio",
+    beyondPortfolio: payload.beyond_portfolio || 0,
+    source: payload.source || SOURCE,
+  };
+}
+
 export const searchJobs = createServerFn({ method: "GET" })
   .validator((input: unknown) => SearchInput.parse(input ?? {}))
-  .handler(async ({ data }) => {
-    const query: Record<string, string | number | undefined> = {
-      q: data.q,
-      fn: data.fn,
-      sen: data.sen,
-      emp: data.emp,
-      loc: data.loc,
-      remote: data.remote ? "1" : undefined,
-      comp: data.comp,
-      portfolio: data.portfolio,
-      cohort: data.cohort,
-      stealth: data.stealth,
-      scope: data.scope,
-      sort: data.sort,
-      page: data.page,
-    };
-    const payload = await apiRequest<{
-      jobs: RawJob[];
-      total: number;
-      page: number;
-      page_size: number;
-      total_pages: number;
-      facets: SpeedrunFacets;
-      scope?: "portfolio" | "everywhere";
-      beyond_portfolio?: number;
-      source?: string;
-    }>("/jobs", query);
-
-    return {
-      jobs: payload.jobs.map((job) => toJob(job)),
-      total: payload.total,
-      page: payload.page,
-      pageSize: payload.page_size,
-      totalPages: payload.total_pages,
-      facets: payload.facets,
-      scope: payload.scope || data.scope || "portfolio",
-      beyondPortfolio: payload.beyond_portfolio || 0,
-      source: payload.source || SOURCE,
-    };
-  });
+  .handler(async ({ data }) => searchSpeedrunJobs(data));
 
 export const getJobDetail = createServerFn({ method: "GET" })
   .validator((input: unknown) => IdInput.parse(input))

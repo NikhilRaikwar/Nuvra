@@ -38,6 +38,8 @@ export type ShortlistSignal = {
   score: number;
   label: "Strong signal" | "Worth a look" | "Stretch";
   reasons: string[];
+  profileEvidence?: string;
+  roleEvidence?: string;
 };
 
 export type ShortlistResult = {

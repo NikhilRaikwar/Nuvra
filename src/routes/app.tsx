@@ -7,9 +7,8 @@ import { JobCard } from "@/components/workstation/JobCard";
 import { ProfileRail } from "@/components/workstation/ProfileRail";
 import { TopNav } from "@/components/workstation/TopNav";
 import { useProfile } from "@/lib/profile";
-import { shortlistJobs, type ShortlistSignal } from "@/lib/shortlist.functions";
-import type { Job } from "@/lib/speedrun.functions";
-import { fetchHiringStats, fetchLiveJobs, fetchProfileJobs } from "@/lib/speedrun-browser";
+import { recruitLiveRoles, type RecruiterResult } from "@/lib/recruiter.functions";
+import { getHiringStats, searchJobs } from "@/lib/speedrun.functions";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -39,40 +38,51 @@ function Workstation() {
   const [filters, setFilters] = useState<Filters>({ scope: "portfolio", sort: "new" });
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(0);
-  const [signals, setSignals] = useState<Record<string, ShortlistSignal>>({});
-  const [resumeSummary, setResumeSummary] = useState("");
-  const [rankingSource, setRankingSource] = useState<"ai" | "deterministic" | null>(null);
-  const [profileJobs, setProfileJobs] = useState<Job[] | null>(null);
-  const [discoveryQueries, setDiscoveryQueries] = useState<string[]>([]);
+  const [agentResult, setAgentResult] = useState<RecruiterResult | null>(null);
   const [discoveryError, setDiscoveryError] = useState<Error | null>(null);
-  const [scanStage, setScanStage] = useState<"discovering" | "ranking" | null>(null);
-  const shortlist = useServerFn(shortlistJobs);
+  const [scanStage, setScanStage] = useState<"scanning" | null>(null);
+  const searchLiveJobs = useServerFn(searchJobs);
+  const hiringStats = useServerFn(getHiringStats);
+  const recruiter = useServerFn(recruitLiveRoles);
 
   const jobsQuery = useQuery({
     queryKey: ["speedrun-jobs", filters, page],
-    queryFn: () => fetchLiveJobs({ ...filters, page }),
+    queryFn: () => searchLiveJobs({ data: { ...filters, page } }),
   });
 
   const statsQuery = useQuery({
     queryKey: ["speedrun-hiring-stats"],
-    queryFn: fetchHiringStats,
+    queryFn: () => hiringStats(),
     staleTime: 5 * 60 * 1000,
   });
 
-  const shortlistMutation = useMutation({
-    mutationFn: (jobs: Job[]) => shortlist({ data: { profile, jobs } }),
+  const recruiterMutation = useMutation({
+    mutationFn: () =>
+      recruiter({
+        data: {
+          profile,
+          preferences: { remote: filters.remote, scope: filters.scope },
+        },
+      }),
     onSuccess: (result) => {
-      setSignals(Object.fromEntries(result.signals.map((signal) => [signal.jobId, signal])));
-      setResumeSummary(result.resumeSummary);
-      setRankingSource(result.source);
+      setAgentResult(result);
       setScanStage(null);
     },
-    onError: () => setScanStage(null),
+    onError: (error) => {
+      setDiscoveryError(
+        error instanceof Error ? error : new Error("The recruiter scan could not finish."),
+      );
+      setScanStage(null);
+    },
   });
 
   const activeJobs = useMemo(
-    () => profileJobs || jobsQuery.data?.jobs || [],
-    [jobsQuery.data, profileJobs],
+    () => agentResult?.jobs || jobsQuery.data?.jobs || [],
+    [agentResult, jobsQuery.data],
+  );
+  const signals = useMemo(
+    () => Object.fromEntries((agentResult?.signals || []).map((signal) => [signal.jobId, signal])),
+    [agentResult],
   );
   const rankedJobs = useMemo(() => {
     return [...activeJobs].sort(
@@ -84,11 +94,7 @@ function Workstation() {
 
   const updateFilters = (patch: Partial<Filters>) => {
     setPage(0);
-    setSignals({});
-    setResumeSummary("");
-    setRankingSource(null);
-    setProfileJobs(null);
-    setDiscoveryQueries([]);
+    setAgentResult(null);
     setDiscoveryError(null);
     setFilters((previous) => ({ ...previous, ...patch }));
   };
@@ -97,29 +103,10 @@ function Workstation() {
     updateFilters({ q: searchInput.trim() || undefined, sort: searchInput.trim() ? "rel" : "new" });
 
   const findBestRoles = async () => {
-    setScanStage("discovering");
-    setSignals({});
-    setResumeSummary("");
-    setRankingSource(null);
+    setScanStage("scanning");
+    setAgentResult(null);
     setDiscoveryError(null);
-
-    try {
-      const discovery = await fetchProfileJobs(profile);
-      if (!discovery.jobs.length) {
-        throw new Error("Speedrun returned no live roles for the selected profile tracks.");
-      }
-      setProfileJobs(discovery.jobs);
-      setDiscoveryQueries(discovery.queries);
-      setScanStage("ranking");
-      shortlistMutation.mutate(discovery.jobs);
-    } catch (error) {
-      setScanStage(null);
-      setDiscoveryError(
-        error instanceof Error
-          ? error
-          : new Error("Could not discover profile-matched live roles."),
-      );
-    }
+    recruiterMutation.mutate();
   };
 
   return (
@@ -131,7 +118,7 @@ function Workstation() {
             profile={profile}
             onChange={update}
             ready={ready}
-            scanning={scanStage !== null || shortlistMutation.isPending}
+            scanning={scanStage !== null || recruiterMutation.isPending}
             scanStage={scanStage}
             onScan={findBestRoles}
           />
@@ -144,15 +131,15 @@ function Workstation() {
                 02 / Live Job Radar
               </p>
               <h1 className="text-2xl font-semibold tracking-tight">
-                {profileJobs
-                  ? `${profileJobs.length} profile-matched roles`
+                {agentResult
+                  ? `${agentResult.jobs.length} recruiter-shortlisted roles`
                   : jobsQuery.data
                     ? `${jobsQuery.data.total.toLocaleString()} live roles`
                     : "Reading the live network..."}
               </h1>
               <p className="mt-1 text-xs text-ink/55">
-                {profileJobs
-                  ? `Live Speedrun candidates for: ${discoveryQueries.join(" / ")}`
+                {agentResult
+                  ? `${agentResult.searchPlan.candidatesFound} candidates / ${agentResult.searchPlan.descriptionsRead} live descriptions checked / ${agentResult.searchPlan.queries.join(" / ")}`
                   : statsQuery.data
                     ? `${statsQuery.data.hiring_companies.toLocaleString()} hiring companies / ${statsQuery.data.remote_jobs.toLocaleString()} remote-open roles`
                     : "Fresh data from the Speedrun Talent Network"}
@@ -161,11 +148,11 @@ function Workstation() {
             <div className="text-left md:text-right space-y-0.5">
               <div className="text-[10px] font-mono text-accent uppercase">
                 {hasSignals
-                  ? rankingSource === "ai"
-                    ? "GPT-4O MINI PROFILE RANKED"
-                    : "PROFILE KEYWORD RANKED"
+                  ? agentResult?.source === "ai"
+                    ? "RECRUITER AGENT / EVIDENCE RANKED"
+                    : "RECRUITER AGENT / CONSERVATIVE FALLBACK"
                   : scanStage
-                    ? "PROFILE DISCOVERY / RANKING"
+                    ? "RECRUITER AGENT / LIVE SCAN"
                     : "LIVE API / UNSCORED"}
               </div>
               <div className="text-[10px] font-mono text-ink/30 uppercase">SOURCE: nuvra</div>
@@ -212,7 +199,7 @@ function Workstation() {
               filters.loc ||
               filters.remote ||
               filters.scope === "everywhere" ||
-              profileJobs) && (
+              agentResult) && (
               <button
                 onClick={() => {
                   setSearchInput("");
@@ -228,7 +215,7 @@ function Workstation() {
                 }}
                 className="px-2.5 py-1 border border-border-dim text-[11px] text-ink/55 hover:border-ink hover:text-ink transition-colors"
               >
-                {profileJobs ? "Show all live roles" : "Clear filters"}
+                {agentResult ? "Show all live roles" : "Clear filters"}
               </button>
             )}
           </div>
@@ -245,17 +232,17 @@ function Workstation() {
           {!ready && (
             <div className="mb-6 p-4 border border-dashed border-border-dim bg-cream-surface/50 text-xs text-ink/60 leading-relaxed">
               <strong className="text-ink">Profile incomplete.</strong> Paste a resume and select
-              target roles to rank this page locally. Deep role analysis uses your OpenRouter-backed
-              agent only after you open a role.
+              target roles to run the recruiter agent. It reads live Speedrun postings server-side,
+              then returns an evidence-backed shortlist.
             </div>
           )}
 
-          {resumeSummary && (
+          {agentResult && (
             <div className="mb-6 p-3 border border-border-dim bg-cream-surface text-xs text-ink/70 leading-relaxed break-words">
               <span className="font-mono text-[10px] uppercase tracking-widest text-accent mr-2">
-                {rankingSource === "ai" ? "GPT-4o mini read" : "Profile map"}
+                {agentResult.source === "ai" ? "Recruiter brief" : "Conservative fallback"}
               </span>
-              {resumeSummary}
+              {agentResult.summary}
             </div>
           )}
 
@@ -272,7 +259,7 @@ function Workstation() {
           )}
 
           <div className="grid gap-px bg-border-dim border border-border-dim">
-            {!profileJobs &&
+            {!agentResult &&
               jobsQuery.isLoading &&
               Array.from({ length: 5 }).map((_, index) => (
                 <div key={index} className="bg-cream-base p-6 h-40 animate-pulse" />
@@ -282,13 +269,13 @@ function Workstation() {
                 key={job.id}
                 job={job}
                 signal={signals[job.id]}
-                loading={shortlistMutation.isPending}
+                loading={recruiterMutation.isPending}
                 index={index}
               />
             ))}
           </div>
 
-          {jobsQuery.data && !profileJobs && (
+          {jobsQuery.data && !agentResult && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-between items-center text-[10px] font-mono uppercase text-ink/40 tracking-widest">
               <span>
                 Page {jobsQuery.data.page + 1} of {jobsQuery.data.totalPages} /{" "}

@@ -50,13 +50,19 @@ export function JobCard({ job, signal, loading, index }: Props) {
       </div>
 
       {signal && (
-        <div className="py-3 border-y border-border-dim/70">
+        <div className="py-3 border-y border-border-dim/70 space-y-2">
           <div className="flex items-center gap-3">
             <SignalPill label={signal.label} />
             <p className="text-[11px] text-ink/70 leading-snug line-clamp-2">
               {signal.reasons.join(" / ")}
             </p>
           </div>
+          {signal.profileEvidence && signal.roleEvidence && (
+            <p className="text-[10px] font-mono text-ink/45 leading-relaxed line-clamp-2">
+              Resume: &quot;{signal.profileEvidence}&quot; <span className="text-ink/25">/</span>{" "}
+              Posting: &quot;{signal.roleEvidence}&quot;
+            </p>
+          )}
         </div>
       )}
 

@@ -8,7 +8,7 @@ interface Props {
   ready: boolean;
   onScan: () => void;
   scanning: boolean;
-  scanStage?: "discovering" | "ranking" | null;
+  scanStage?: "scanning" | null;
 }
 
 export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanStage }: Props) {
@@ -177,11 +177,7 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
         disabled={!ready || scanning}
         className="w-full bg-ink text-cream-base py-3 text-xs font-semibold tracking-wide uppercase hover:bg-accent transition-colors disabled:bg-ink/20 disabled:cursor-not-allowed"
       >
-        {scanStage === "discovering"
-          ? "Finding live roles..."
-          : scanStage === "ranking"
-            ? "GPT-4o mini is ranking..."
-            : "Find my best roles"}
+        {scanStage === "scanning" ? "Recruiter is checking live roles..." : "Find my best roles"}
       </button>
     </aside>
   );

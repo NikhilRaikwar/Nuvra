@@ -19,9 +19,12 @@ report, a small proof project, and an honest application draft.
   portfolio scope.
 - Stores the builder profile only in the browser's `localStorage`; no sign-up
   or database is required.
-- Discovers live roles from the selected tracks and resume signals, then ranks
-  up to 50 candidates with GPT-4o mini. A deterministic ranking remains available
-  when the model is unavailable.
+- Runs a server-side recruiter scan: builds a query plan from selected tracks and
+  resume signals, searches the live board, deduplicates candidates, reads up to
+  12 current role descriptions, then returns up to eight evidence-backed matches.
+- Shows the live search plan, candidate count, description count, profile evidence,
+  and posting evidence for every AI-ranked role. A conservative deterministic
+  shortlist remains available when the model is unavailable.
 - Uses OpenRouter for the explicit profile scan and for a selected open role:
   fit report, proof-project brief, and application draft.
 - Links every job to Speedrun's canonical listing and preserves the API's
@@ -33,9 +36,10 @@ report, a small proof project, and an honest application draft.
 flowchart LR
   Builder[Builder browser] --> UI[Nuvra React UI]
   UI -->|localStorage only| Profile[Local builder profile]
-  UI -->|CORS search + stats; source=nuvra| Speedrun[Speedrun Talent Network API]
   UI -->|TanStack server functions| Server[Nuvra server]
-  Server -->|role details; source=nuvra| Speedrun
+  Server -->|search, stats, role details; source=nuvra| Speedrun[Speedrun Talent Network API]
+  Server --> Recruiter[Recruiter workflow]
+  Recruiter -->|query plan, dedupe, inspect 12 postings| Server
   Server -->|selected role + profile| OpenRouter[OpenRouter]
   OpenRouter --> Model[Structured-output LLM]
   Server --> UI
@@ -80,8 +84,9 @@ The integration uses the documented API at
 | Dashboard totals     | `GET /api/v1/stats/hiring` |
 
 - Every request identifies the product with `source=nuvra`.
-- Live search and dashboard totals use the board's CORS-enabled REST API directly
-  from the browser; job-detail and AI actions stay server-side.
+- Live search, dashboard totals, role detail, and recruiter scans are server-mediated.
+  This keeps the OpenRouter key private and avoids browser-network failures while
+  preserving the API's `source=nuvra` attribution.
 - API caching can make listings a few minutes behind the original company board.
 - `scope=everywhere` is only used after the builder enables the broader-universe
   control.
@@ -93,10 +98,17 @@ The integration uses the documented API at
 
 ## AI behavior
 
-The selected role is fetched fresh before every AI request. The server sends the
-role detail and the profile currently stored in the browser to OpenRouter. The
-agent is instructed to use only the supplied profile and never invent employers,
-repositories, metrics, or credentials.
+The recruiter agent searches only the documented Speedrun API. It turns selected
+tracks and resume terms into a bounded live query plan, reviews current descriptions
+for the strongest candidates, and returns exact profile and posting evidence with
+each shortlist item. Target-role choices can guide search, but never count as
+candidate experience. Senior and staff roles are capped when the profile lacks
+explicit seniority evidence.
+
+The selected-role agent fetches the role fresh before every AI request. The server
+sends that role detail and the profile currently stored in the browser to OpenRouter.
+All agents are instructed to use only supplied profile facts and never invent
+employers, repositories, metrics, or credentials.
 
 Structured fit and project outputs are validated with Zod. If a model returns
 invalid structured data, the UI shows an error instead of a fake zero-score
@@ -138,6 +150,7 @@ pagination, and stats remain live API reads.
 src/routes/app.tsx                 Live radar and local profile workflow
 src/routes/role.$id.tsx            Selected-role evidence workspace
 src/lib/speedrun.functions.ts      Live Speedrun API adapter
+src/lib/recruiter.functions.ts     Server-side live-role recruiter workflow
 src/lib/shortlist.functions.ts     Deterministic local ranking
 src/lib/scoring.functions.ts       Structured fit-report agent
 src/lib/proof.functions.ts         Structured proof-project agent
