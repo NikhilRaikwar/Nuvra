@@ -19,8 +19,12 @@ report, a small proof project, and an honest application draft.
   portfolio scope.
 - Stores the builder profile only in the browser's `localStorage`; no sign-up
   or database is required.
+- During an explicit recruiter scan, reads a public GitHub profile for its
+  active repositories, languages, README excerpts, and declared live-project
+  links. It can also inspect one public portfolio page for project text,
+  headings, and public links.
 - Runs a server-side recruiter scan: builds a query plan from selected tracks and
-  resume signals, searches the live board, deduplicates candidates, reads up to
+  profile and public-project signals, searches the live board, deduplicates candidates, reads up to
   12 current role descriptions, then returns up to eight evidence-backed matches.
 - Shows the live search plan, candidate count, description count, profile evidence,
   and posting evidence for every AI-ranked role. A conservative deterministic
@@ -38,6 +42,8 @@ flowchart LR
   UI -->|localStorage only| Profile[Local builder profile]
   UI -->|TanStack server functions| Server[Nuvra server]
   Server -->|search, stats, role details; source=nuvra| Speedrun[Speedrun Talent Network API]
+  Server -->|public repositories and README excerpts| GitHub[GitHub public API]
+  Server -->|one public HTML page and project links| Portfolio[Portfolio site]
   Server --> Recruiter[Recruiter workflow]
   Recruiter -->|query plan, dedupe, inspect 12 postings| Server
   Server -->|selected role + profile| OpenRouter[OpenRouter]
@@ -98,12 +104,12 @@ The integration uses the documented API at
 
 ## AI behavior
 
-The recruiter agent searches only the documented Speedrun API. It turns selected
-tracks and resume terms into a bounded live query plan, reviews current descriptions
-for the strongest candidates, and returns exact profile and posting evidence with
-each shortlist item. Target-role choices can guide search, but never count as
-candidate experience. Senior and staff roles are capped when the profile lacks
-explicit seniority evidence.
+The recruiter agent searches only the documented Speedrun API for jobs. It turns
+selected tracks, resume terms, and factual public-project evidence into a bounded
+live query plan, reviews current descriptions for the strongest candidates, and
+returns exact profile and posting evidence with each shortlist item. Target-role
+choices can guide search, but never count as candidate experience. Senior and staff
+roles are capped when the profile lacks explicit seniority evidence.
 
 The selected-role agent fetches the role fresh before every AI request. The server
 sends that role detail and the profile currently stored in the browser to OpenRouter.
@@ -121,6 +127,13 @@ builder selects a format and clicks the button.
   clears it.
 - Opening an AI report sends the selected role and the local profile to the
   configured OpenRouter model. Do not include secrets in the resume field.
+- Public GitHub and portfolio enrichment runs only when the builder starts a
+  recruiter scan. GitHub reads public repositories and up to four README files;
+  portfolio enrichment reads one public HTML page, follows at most three redirects,
+  and blocks private/local network destinations. It never reads LinkedIn pages.
+- Public-page content is treated as untrusted reference material, not as model
+  instructions. A site can decline the request or rate-limit it, in which case
+  Nuvra marks that source unavailable and continues with the saved profile.
 - TanStack server functions are protected by same-origin CSRF middleware.
 - Server input is Zod-validated and job IDs are URL-encoded before API requests.
 - There is no account system, server-side profile store, or automated application
@@ -151,6 +164,7 @@ src/routes/app.tsx                 Live radar and local profile workflow
 src/routes/role.$id.tsx            Selected-role evidence workspace
 src/lib/speedrun.functions.ts      Live Speedrun API adapter
 src/lib/recruiter.functions.ts     Server-side live-role recruiter workflow
+src/lib/profile-enrichment.server.ts Public GitHub and portfolio evidence reader
 src/lib/shortlist.functions.ts     Deterministic local ranking
 src/lib/scoring.functions.ts       Structured fit-report agent
 src/lib/proof.functions.ts         Structured proof-project agent
@@ -173,6 +187,8 @@ Released under the [MIT License](LICENSE).
 
 ## Limitations
 
-- The app does not verify claims in a resume, GitHub URL, or generated draft.
+- The app does not verify every claim in a resume, public project page, or generated draft.
+- GitHub and portfolio evidence requires public access. A portfolio can block or
+  rate-limit server requests, and LinkedIn is intentionally not scraped.
 - A current role can close between the radar response and opening its report.
 - AI output is a working draft, not a truth source. Review it before sending it.

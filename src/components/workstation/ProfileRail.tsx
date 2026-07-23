@@ -65,14 +65,14 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
             onChange={(v) => onChange({ identity: v })}
           />
           <Field
-            label="GitHub"
+            label="GitHub (public)"
             mono
             value={profile.githubUrl}
             placeholder="https://github.com/handle"
             onChange={(v) => onChange({ githubUrl: v })}
           />
           <Field
-            label="Portfolio"
+            label="Portfolio (public)"
             mono
             value={profile.portfolioUrl}
             placeholder="https://you.dev"
@@ -114,12 +114,15 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
                 ) : pdfState.name ? (
                   `attached: ${pdfState.name}`
                 ) : (
-                  "stored locally, never uploaded"
+                  "stored locally; used only when you run a scan"
                 )}
               </span>
               <span>{profile.resumeText.length} chars</span>
             </div>
           </div>
+          <p className="text-[10px] font-mono text-ink/35 leading-relaxed">
+            Public GitHub and portfolio pages are inspected only during a recruiter scan.
+          </p>
         </div>
       </section>
 

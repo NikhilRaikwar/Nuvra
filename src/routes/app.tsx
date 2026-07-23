@@ -243,6 +243,20 @@ function Workstation() {
                 {agentResult.source === "ai" ? "Recruiter brief" : "Conservative fallback"}
               </span>
               {agentResult.summary}
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border-dim pt-2 text-[10px] font-mono text-ink/45">
+                <span>
+                  GitHub: {agentResult.profileSources.github.detail}
+                  {agentResult.profileSources.github.deployedLinks
+                    ? ` / ${agentResult.profileSources.github.deployedLinks} live links`
+                    : ""}
+                </span>
+                <span>
+                  Portfolio: {agentResult.profileSources.portfolio.detail}
+                  {agentResult.profileSources.portfolio.deployedLinks
+                    ? ` / ${agentResult.profileSources.portfolio.deployedLinks} project links`
+                    : ""}
+                </span>
+              </div>
             </div>
           )}
 
