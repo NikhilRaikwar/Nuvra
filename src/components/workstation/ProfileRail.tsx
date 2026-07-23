@@ -148,6 +148,10 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
             );
           })}
         </div>
+        <p className="mt-3 text-[10px] font-mono text-ink/40 leading-relaxed">
+          The live scan searches Speedrun only for these selected tracks. Changing a track clears
+          the previous shortlist.
+        </p>
       </section>
 
       <section className="p-5 bg-cream-surface border border-border-dim">
@@ -170,7 +174,7 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
         </div>
         <p className="mt-5 text-[11px] text-ink/60 leading-relaxed">
           {ready
-            ? "Profile ready. Scan the radar and we'll rank the roles you can actually win."
+            ? "Profile evidence found. Scan the radar for stable, evidence-based role matches."
             : "Add a resume paste and pick target roles to unlock role scoring."}
         </p>
       </section>

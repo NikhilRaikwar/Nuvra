@@ -101,7 +101,7 @@ export function profileHash(p: Profile): string {
   const s = JSON.stringify({
     g: p.githubUrl,
     p: p.portfolioUrl,
-    r: p.resumeText.slice(0, 400),
+    r: p.resumeText,
     t: [...p.targetRoles].sort(),
   });
   let h = 0;

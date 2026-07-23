@@ -273,7 +273,10 @@ function ScoreMark({ report }: { report: FitReport }) {
         <span className="text-2xl text-ink/40">%</span>
       </div>
       <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-ink/45">
-        Evidence fit / {report.verdict}
+        Stable evidence fit / {report.verdict}
+      </div>
+      <div className="mt-1 text-[9px] font-mono uppercase tracking-wider text-ink/30">
+        Saved proof + live post
       </div>
     </>
   );

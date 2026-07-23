@@ -41,7 +41,9 @@ export function JobCard({ job, signal, loading, index }: Props) {
           ) : signal ? (
             <>
               <div className="text-2xl font-mono tracking-tighter tabular">{signal.score}</div>
-              <div className="text-[9px] font-mono uppercase text-ink/40">Discovery match</div>
+              <div className="text-[9px] font-mono uppercase text-ink/40">
+                Evidence fit / stable
+              </div>
             </>
           ) : (
             <div className="text-[10px] font-mono uppercase text-ink/30">Unranked</div>

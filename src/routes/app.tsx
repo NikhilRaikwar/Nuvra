@@ -6,7 +6,7 @@ import { FacetStrip } from "@/components/workstation/FacetStrip";
 import { JobCard } from "@/components/workstation/JobCard";
 import { ProfileRail } from "@/components/workstation/ProfileRail";
 import { TopNav } from "@/components/workstation/TopNav";
-import { useProfile } from "@/lib/profile";
+import { profileHash, useProfile } from "@/lib/profile";
 import { recruitLiveRoles, type RecruiterResult } from "@/lib/recruiter.functions";
 import { getHiringStats, searchJobs } from "@/lib/speedrun.functions";
 
@@ -39,6 +39,7 @@ function Workstation() {
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(0);
   const [agentResult, setAgentResult] = useState<RecruiterResult | null>(null);
+  const [resultProfileHash, setResultProfileHash] = useState<string | null>(null);
   const [discoveryError, setDiscoveryError] = useState<Error | null>(null);
   const [scanStage, setScanStage] = useState<"scanning" | null>(null);
   const searchLiveJobs = useServerFn(searchJobs);
@@ -64,8 +65,10 @@ function Workstation() {
           preferences: { remote: filters.remote, scope: filters.scope },
         },
       }),
-    onSuccess: (result) => {
+    onMutate: () => ({ profileHash: profileHash(profile) }),
+    onSuccess: (result, _variables, context) => {
       setAgentResult(result);
+      setResultProfileHash(context.profileHash);
       setScanStage(null);
     },
     onError: (error) => {
@@ -76,13 +79,18 @@ function Workstation() {
     },
   });
 
+  const shortlistIsCurrent = resultProfileHash === profileHash(profile);
+  const currentAgentResult = shortlistIsCurrent ? agentResult : null;
   const activeJobs = useMemo(
-    () => agentResult?.jobs || jobsQuery.data?.jobs || [],
-    [agentResult, jobsQuery.data],
+    () => currentAgentResult?.jobs || jobsQuery.data?.jobs || [],
+    [currentAgentResult, jobsQuery.data],
   );
   const signals = useMemo(
-    () => Object.fromEntries((agentResult?.signals || []).map((signal) => [signal.jobId, signal])),
-    [agentResult],
+    () =>
+      Object.fromEntries(
+        (currentAgentResult?.signals || []).map((signal) => [signal.jobId, signal]),
+      ),
+    [currentAgentResult],
   );
   const rankedJobs = useMemo(() => {
     return [...activeJobs].sort(
@@ -131,15 +139,15 @@ function Workstation() {
                 02 / Live Job Radar
               </p>
               <h1 className="text-2xl font-semibold tracking-tight">
-                {agentResult
-                  ? `${agentResult.jobs.length} recruiter-shortlisted roles`
+                {currentAgentResult
+                  ? `${currentAgentResult.jobs.length} recruiter-shortlisted roles`
                   : jobsQuery.data
                     ? `${jobsQuery.data.total.toLocaleString()} live roles`
                     : "Reading the live network..."}
               </h1>
               <p className="mt-1 text-xs text-ink/55">
-                {agentResult
-                  ? `${agentResult.searchPlan.candidatesFound} candidates / ${agentResult.searchPlan.descriptionsRead} live descriptions checked / ${agentResult.searchPlan.queries.join(" / ")}`
+                {currentAgentResult
+                  ? `${currentAgentResult.searchPlan.candidatesFound} Speedrun candidates / ${currentAgentResult.searchPlan.descriptionsRead} live descriptions checked / ${currentAgentResult.searchPlan.queries.join(" / ")}`
                   : statsQuery.data
                     ? `${statsQuery.data.hiring_companies.toLocaleString()} hiring companies / ${statsQuery.data.remote_jobs.toLocaleString()} remote-open roles`
                     : "Fresh data from the Speedrun Talent Network"}
@@ -148,14 +156,14 @@ function Workstation() {
             <div className="text-left md:text-right space-y-0.5">
               <div className="text-[10px] font-mono text-accent uppercase">
                 {hasSignals
-                  ? agentResult?.source === "ai"
-                    ? "RECRUITER AGENT / EVIDENCE RANKED"
-                    : "RECRUITER AGENT / CONSERVATIVE FALLBACK"
+                  ? "LIVE SPEEDRUN / STABLE EVIDENCE RANKED"
                   : scanStage
                     ? "RECRUITER AGENT / LIVE SCAN"
                     : "LIVE API / UNSCORED"}
               </div>
-              <div className="text-[10px] font-mono text-ink/30 uppercase">SOURCE: nuvra</div>
+              <div className="text-[10px] font-mono text-ink/30 uppercase">
+                SOURCE TAG: nuvra / API: Speedrun
+              </div>
             </div>
           </div>
 
@@ -199,7 +207,7 @@ function Workstation() {
               filters.loc ||
               filters.remote ||
               filters.scope === "everywhere" ||
-              agentResult) && (
+              currentAgentResult) && (
               <button
                 onClick={() => {
                   setSearchInput("");
@@ -215,7 +223,7 @@ function Workstation() {
                 }}
                 className="px-2.5 py-1 border border-border-dim text-[11px] text-ink/55 hover:border-ink hover:text-ink transition-colors"
               >
-                {agentResult ? "Show all live roles" : "Clear filters"}
+                {currentAgentResult ? "Show all live roles" : "Clear filters"}
               </button>
             )}
           </div>
@@ -237,26 +245,39 @@ function Workstation() {
             </div>
           )}
 
-          {agentResult && (
+          {currentAgentResult && (
             <div className="mb-6 p-3 border border-border-dim bg-cream-surface text-xs text-ink/70 leading-relaxed break-words">
               <span className="font-mono text-[10px] uppercase tracking-widest text-accent mr-2">
-                {agentResult.source === "ai" ? "Recruiter brief" : "Conservative fallback"}
+                {currentAgentResult.source === "ai"
+                  ? "Recruiter brief"
+                  : "Evidence-ranked shortlist"}
               </span>
-              {agentResult.summary}
+              {currentAgentResult.summary}
+              <p className="mt-2 text-[10px] font-mono text-ink/45">
+                Stable score: changes only when saved profile/public project evidence or the live
+                Speedrun post changes. Generating a proof brief does not increase it.
+              </p>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border-dim pt-2 text-[10px] font-mono text-ink/45">
                 <span>
-                  GitHub: {agentResult.profileSources.github.detail}
-                  {agentResult.profileSources.github.deployedLinks
-                    ? ` / ${agentResult.profileSources.github.deployedLinks} live links`
+                  GitHub: {currentAgentResult.profileSources.github.detail}
+                  {currentAgentResult.profileSources.github.deployedLinks
+                    ? ` / ${currentAgentResult.profileSources.github.deployedLinks} live links`
                     : ""}
                 </span>
                 <span>
-                  Portfolio: {agentResult.profileSources.portfolio.detail}
-                  {agentResult.profileSources.portfolio.deployedLinks
-                    ? ` / ${agentResult.profileSources.portfolio.deployedLinks} project links`
+                  Portfolio: {currentAgentResult.profileSources.portfolio.detail}
+                  {currentAgentResult.profileSources.portfolio.deployedLinks
+                    ? ` / ${currentAgentResult.profileSources.portfolio.deployedLinks} project links`
                     : ""}
                 </span>
               </div>
+            </div>
+          )}
+
+          {currentAgentResult && !currentAgentResult.jobs.length && (
+            <div className="mb-6 border border-dashed border-border-dim p-5 text-sm text-ink/65 leading-relaxed">
+              No verified live descriptions reached the minimum profile-evidence threshold. Nuvra
+              excludes stale listings and low-evidence matches instead of padding your shortlist.
             </div>
           )}
 
@@ -273,7 +294,7 @@ function Workstation() {
           )}
 
           <div className="grid gap-px bg-border-dim border border-border-dim">
-            {!agentResult &&
+            {!currentAgentResult &&
               jobsQuery.isLoading &&
               Array.from({ length: 5 }).map((_, index) => (
                 <div key={index} className="bg-cream-base p-6 h-40 animate-pulse" />
@@ -289,7 +310,7 @@ function Workstation() {
             ))}
           </div>
 
-          {jobsQuery.data && !agentResult && (
+          {jobsQuery.data && !currentAgentResult && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-between items-center text-[10px] font-mono uppercase text-ink/40 tracking-widest">
               <span>
                 Page {jobsQuery.data.page + 1} of {jobsQuery.data.totalPages} /{" "}
