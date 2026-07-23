@@ -139,7 +139,8 @@ function labelFor(score: number): ShortlistSignal["label"] {
 }
 
 function normalizeScore(score: number) {
-  return Math.max(0, Math.min(100, Math.round(score)));
+  // This score only orders live roles for review. It is not an application-readiness score.
+  return Math.max(0, Math.min(85, Math.round(score)));
 }
 
 function rankDeterministically(data: z.infer<typeof Input>): ShortlistSignal[] {
@@ -148,7 +149,6 @@ function rankDeterministically(data: z.infer<typeof Input>): ShortlistSignal[] {
     data.profile.githubUrl,
     data.profile.portfolioUrl,
     data.profile.resumeText,
-    ...data.profile.targetRoles,
   ].join(" ");
   const builderTerms = tokens(builderText);
 
@@ -158,13 +158,14 @@ function rankDeterministically(data: z.infer<typeof Input>): ShortlistSignal[] {
         [job.title, job.function, job.seniority || "", job.location].join(" "),
       );
       const sharedTerms = [...jobTerms].filter((term) => builderTerms.has(term));
-      const titleOverlap = Math.min(34, sharedTerms.length * 8);
+      const titleOverlap = Math.min(28, sharedTerms.length * 7);
       const selectedKeywords = data.profile.targetRoles.flatMap(
         (role) => ROLE_KEYWORDS[role] || [],
       );
       const builderRoleTerms = matchedTerms(builderTerms, selectedKeywords);
       const jobRoleTerms = matchedTerms(jobTerms, selectedKeywords);
-      const roleScore = Math.min(42, builderRoleTerms.length * 5 + jobRoleTerms.length * 7);
+      // A selected track is useful for finding roles, but never counts as candidate evidence.
+      const roleScore = Math.min(30, Math.min(builderRoleTerms.length, jobRoleTerms.length) * 8);
       const shippingScore =
         matchedTerms(builderTerms, [
           "shipped",
@@ -177,7 +178,7 @@ function rankDeterministically(data: z.infer<typeof Input>): ShortlistSignal[] {
         ]).length * 4;
       const score = Math.max(
         5,
-        Math.min(100, 18 + titleOverlap + roleScore + shippingScore + (job.remote ? 6 : 0)),
+        Math.min(85, 12 + titleOverlap + roleScore + shippingScore + (job.remote ? 5 : 0)),
       );
 
       return {

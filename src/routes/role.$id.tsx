@@ -224,7 +224,7 @@ function FitReportCard({
       <div className="flex items-start justify-between mb-6 gap-6">
         <div>
           <p className="text-[10px] font-mono uppercase text-ink/40 tracking-widest mb-1">
-            01 / Agent fit report
+            01 / Evidence fit report
           </p>
           <p className="text-sm text-ink/70 max-w-md leading-relaxed">
             {loading
@@ -273,7 +273,7 @@ function ScoreMark({ report }: { report: FitReport }) {
         <span className="text-2xl text-ink/40">%</span>
       </div>
       <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-ink/45">
-        {report.verdict}
+        Evidence fit / {report.verdict}
       </div>
     </>
   );

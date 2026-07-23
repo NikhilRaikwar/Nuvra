@@ -34,6 +34,41 @@ const FitSchema = z.object({
 
 export type FitReport = z.infer<typeof FitSchema>;
 
+function profileShowsSeniorEvidence(profile: z.infer<typeof ProfileSchema>) {
+  const evidence = [profile.identity, profile.resumeText].join(" ").toLowerCase();
+  return (
+    /\b\d{1,2}\+?\s*(years?|yrs?)\b/.test(evidence) ||
+    /\b(senior|staff|principal|lead engineer|engineering lead|manager|director)\b/.test(evidence)
+  );
+}
+
+function requiresSeniorEvidence(seniority: string | null | undefined) {
+  return /\b(senior|staff|principal|lead|manager|director|exec|founding)\b/i.test(seniority || "");
+}
+
+function normalizeFitReport(
+  report: FitReport,
+  profile: z.infer<typeof ProfileSchema>,
+  seniority: string | null | undefined,
+): FitReport {
+  let fitScore = Math.max(0, Math.min(88, Math.round(report.fitScore)));
+  let verdict = report.verdict;
+
+  // Senior openings require explicit tenure or leadership evidence, not just adjacent skills.
+  if (requiresSeniorEvidence(seniority) && !profileShowsSeniorEvidence(profile)) {
+    fitScore = Math.min(64, Math.max(45, fitScore));
+    verdict = "Build Proof First";
+  } else if (verdict === "Skip") {
+    fitScore = Math.min(44, fitScore);
+  } else if (verdict === "Build Proof First") {
+    fitScore = Math.max(45, Math.min(74, fitScore));
+  } else {
+    fitScore = Math.max(75, Math.min(88, fitScore));
+  }
+
+  return { ...report, fitScore, verdict };
+}
+
 export const scoreRole = createServerFn({ method: "POST" })
   .validator((input: unknown) => Input.parse(input))
   .handler(async ({ data }): Promise<FitReport> => {
@@ -84,10 +119,7 @@ Return a compact fit report. Keep each bullet under 14 words. Max 4 items per li
         system,
         prompt,
       });
-      return {
-        ...output,
-        fitScore: Math.max(0, Math.min(100, Math.round(output.fitScore))),
-      };
+      return normalizeFitReport(output, data.profile, job.seniority);
     } catch (error) {
       if (NoObjectGeneratedError.isInstance(error)) {
         throw new Error("The model returned an invalid fit report. Please try again.");
