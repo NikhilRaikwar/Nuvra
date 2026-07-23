@@ -30,7 +30,14 @@ report, a small proof project, and an honest application draft.
   and posting evidence for every AI-ranked role. A conservative deterministic
   shortlist remains available when the model is unavailable.
 - Uses OpenRouter for the explicit profile scan and for a selected open role:
-  fit report, proof-project brief, and application draft.
+  fit report, proof-project brief, and application draft. Selected-role actions
+  receive the same saved, public GitHub, and public portfolio evidence used in
+  the recruiter scan.
+- Requires application drafts to cite both a candidate fact and a live role
+  fact. If a model response cannot be grounded, Nuvra creates a concise,
+  role-specific draft from verified facts when possible instead of inventing
+  experience. Proof briefs fall back to a clearly labelled starter brief when
+  the model is unavailable.
 - Links every job to Speedrun's canonical listing and preserves the API's
   stealth masking.
 
@@ -165,6 +172,7 @@ src/routes/role.$id.tsx            Selected-role evidence workspace
 src/lib/speedrun.functions.ts      Live Speedrun API adapter
 src/lib/recruiter.functions.ts     Server-side live-role recruiter workflow
 src/lib/profile-enrichment.server.ts Public GitHub and portfolio evidence reader
+src/lib/profile-evidence.server.ts Shared evidence facts for role-page agents
 src/lib/shortlist.functions.ts     Deterministic local ranking
 src/lib/scoring.functions.ts       Structured fit-report agent
 src/lib/proof.functions.ts         Structured proof-project agent

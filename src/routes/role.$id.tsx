@@ -4,9 +4,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { TopNav } from "@/components/workstation/TopNav";
-import { useProfile, profileIsReady, type Profile } from "@/lib/profile";
+import { useProfile, profileHash, profileIsReady, type Profile } from "@/lib/profile";
 import { generateApplication, type ApplicationDraft } from "@/lib/application.functions";
-import { generateProof, type ProofProject } from "@/lib/proof.functions";
+import { generateProof, type GeneratedProofProject } from "@/lib/proof.functions";
 import { scoreRole, type FitReport } from "@/lib/scoring.functions";
 import { getJobDetail, type Job } from "@/lib/speedrun.functions";
 
@@ -184,7 +184,7 @@ function RoleWorkspace({ job, profile }: { job: Job; profile: Profile }) {
   const score = useServerFn(scoreRole);
   const proof = useServerFn(generateProof);
   const fitQuery = useQuery({
-    queryKey: ["agent-fit", job.id, profile.resumeText.slice(0, 500), profile.targetRoles],
+    queryKey: ["agent-fit", job.id, profileHash(profile)],
     queryFn: () => score({ data: { jobId: job.id, profile } }),
   });
   const proofMutation = useMutation({
@@ -313,7 +313,7 @@ function ProofCard({
   onGenerate,
   disabled,
 }: {
-  project?: ProofProject;
+  project?: GeneratedProofProject;
   loading: boolean;
   error: Error | null;
   onGenerate: () => void;
@@ -330,6 +330,11 @@ function ProofCard({
             {project ? project.name : "Close the most important evidence gap"}
           </h2>
           {project && <p className="text-sm italic text-ink/70 mt-1">{project.tagline}</p>}
+          {project?.source === "starter" && (
+            <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-ink/45">
+              Starter brief / model unavailable
+            </p>
+          )}
         </div>
         <button
           onClick={onGenerate}
@@ -350,7 +355,7 @@ function ProofCard({
   );
 }
 
-function ProofProjectView({ project }: { project: ProofProject }) {
+function ProofProjectView({ project }: { project: GeneratedProofProject }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs mt-6">
       <MetaLine label="Problem" value={project.problem} />
@@ -537,8 +542,8 @@ function ApplicationWriter({ job, profile }: { job: Job; profile: Profile }) {
             </button>
           </div>
           <p className="mt-4 text-[10px] font-mono text-ink/30 leading-relaxed">
-            Uses the live role description and only facts in your saved profile. Unrelated roles are
-            flagged instead of receiving a generic message.
+            Uses the live role description plus verified saved, GitHub, and portfolio evidence.
+            Unrelated roles are flagged instead of receiving a generic message.
           </p>
         </>
       )}
