@@ -148,18 +148,18 @@ export function ProfileRail({ profile, onChange, ready, onScan, scanning, scanSt
       </section>
 
       <section className="p-5 bg-cream-surface border border-border-dim">
-        <h3 className="text-xs font-semibold mb-3">Proof Coverage</h3>
+        <h3 className="text-xs font-semibold mb-3">Profile Signals</h3>
         <div className="space-y-3">
           {coverage.map((c) => (
             <div key={c.label}>
               <div className="flex justify-between items-end">
                 <span className="text-[11px] font-mono">{c.label}</span>
-                <span className="text-[11px] font-mono text-accent tabular">{c.pct}%</span>
+                <span className="text-[10px] font-mono text-accent">{c.detail}</span>
               </div>
               <div className="h-[3px] bg-ink/5 w-full mt-1">
                 <div
                   className="h-full bg-ink transition-all duration-500"
-                  style={{ width: `${c.pct}%` }}
+                  style={{ width: `${c.width}%` }}
                 />
               </div>
             </div>
@@ -218,24 +218,19 @@ function Field({
 }
 
 function computeCoverage(p: Profile) {
-  const text = (p.resumeText + " " + p.targetRoles.join(" ")).toLowerCase();
-  const hit = (kws: string[]) =>
-    Math.min(
-      100,
-      kws.reduce((n, k) => n + (text.includes(k) ? 30 : 0), 0),
-    );
+  const text = p.resumeText.toLowerCase();
+  const signal = (label: string, keywords: string[]) => {
+    const count = keywords.filter((keyword) => text.includes(keyword)).length;
+    return {
+      label,
+      width: count ? Math.min(100, 25 + count * 25) : 8,
+      detail: count ? `${count} terms found` : "No terms found",
+    };
+  };
+
   return [
-    {
-      label: "AI / Infra",
-      pct: hit(["ai", "llm", "rag", "python", "gpu", "inference"]),
-    },
-    {
-      label: "Full-stack Ship",
-      pct: hit(["react", "typescript", "next", "postgres", "node"]),
-    },
-    {
-      label: "Product Design",
-      pct: hit(["design", "figma", "ux", "product", "swift"]),
-    },
+    signal("AI / Infra", ["ai", "llm", "rag", "python", "gpu", "inference"]),
+    signal("Full-stack Ship", ["react", "typescript", "next", "postgres", "node"]),
+    signal("Product Design", ["design", "figma", "ux", "product", "swift"]),
   ];
 }

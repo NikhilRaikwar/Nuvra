@@ -54,9 +54,21 @@ const ModelSignalSchema = z.object({
 });
 
 const ModelShortlistSchema = z.object({
-  resumeSummary: z.string(),
+  resumeSummary: z.string().min(20).max(420),
   signals: z.array(ModelSignalSchema),
 });
+
+function completeSummary(summary: string) {
+  const clean = summary.replace(/\s+/g, " ").trim();
+  if (clean.length <= 360) return clean;
+  const cutoff = clean.slice(0, 360);
+  const lastSentence = Math.max(cutoff.lastIndexOf(". "), cutoff.lastIndexOf("! "));
+  const safeCutoff =
+    lastSentence > 80
+      ? cutoff.slice(0, lastSentence + 1)
+      : cutoff.slice(0, cutoff.lastIndexOf(" "));
+  return `${safeCutoff.trim()}...`;
+}
 
 const STOP_WORDS = new Set([
   "about",
@@ -221,6 +233,7 @@ export const shortlistJobs = createServerFn({ method: "POST" })
           "First read the resume and extract only evidenced skills, domains, seniority signals, and shipped work.",
           "Then rank the supplied live Speedrun roles for practical fit.",
           "Never invent experience, credentials, employers, metrics, or role requirements.",
+          "Do not treat a role title, target track, or job requirement as proof of candidate experience.",
           "A strong signal requires clear resume evidence; otherwise prefer Worth a look or Stretch.",
         ].join(" "),
         prompt: `BUILDER PROFILE\nIdentity: ${data.profile.identity || "(not provided)"}\nSelected tracks: ${data.profile.targetRoles.join(", ") || "(none)"}\nGitHub: ${data.profile.githubUrl || "(none)"}\nPortfolio: ${data.profile.portfolioUrl || "(none)"}\nResume:\n${data.profile.resumeText.slice(0, 7000) || "(empty)"}\n\nLIVE SPEEDRUN ROLES (rank only these exact job IDs):\n${JSON.stringify(candidates)}`,
@@ -245,7 +258,7 @@ export const shortlistJobs = createServerFn({ method: "POST" })
         })
         .sort((a, b) => b.score - a.score);
 
-      return { resumeSummary: output.resumeSummary.slice(0, 260), signals, source: "ai" };
+      return { resumeSummary: completeSummary(output.resumeSummary), signals, source: "ai" };
     } catch (error) {
       console.warn("AI ranking unavailable; using deterministic profile ranking.", error);
       return fallbackResult;

@@ -251,7 +251,7 @@ function Workstation() {
           )}
 
           {resumeSummary && (
-            <div className="mb-6 p-3 border border-border-dim bg-cream-surface text-xs text-ink/70 leading-relaxed">
+            <div className="mb-6 p-3 border border-border-dim bg-cream-surface text-xs text-ink/70 leading-relaxed break-words">
               <span className="font-mono text-[10px] uppercase tracking-widest text-accent mr-2">
                 {rankingSource === "ai" ? "GPT-4o mini read" : "Profile map"}
               </span>
