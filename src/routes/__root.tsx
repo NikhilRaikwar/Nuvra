@@ -12,6 +12,9 @@ import { Analytics } from "@vercel/analytics/react";
 
 import appCss from "../styles.css?url";
 
+const appUrl = import.meta.env.VITE_APP_URL?.replace(/\/$/, "");
+const socialImageUrl = appUrl ? `${appUrl}/nuvra-og-banner.png` : "/nuvra-og-banner.png";
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-cream-base px-4">
@@ -85,6 +88,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { name: "author", content: "Nuvra" },
       { name: "theme-color", content: "#ff5200" },
+      { property: "og:url", content: appUrl || "/" },
       { property: "og:title", content: "Nuvra - Prove the next move." },
       {
         property: "og:description",
@@ -93,11 +97,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "Nuvra" },
+      { property: "og:image", content: socialImageUrl },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:type", content: "image/png" },
+      {
+        property: "og:image:alt",
+        content: "Nuvra job intelligence agent: Live Role, Proof, Signal.",
+      },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Nuvra - Prove the next move." },
       {
         name: "twitter:description",
         content: "Grounded startup-job intelligence for technical builders.",
+      },
+      { name: "twitter:image", content: socialImageUrl },
+      {
+        name: "twitter:image:alt",
+        content: "Nuvra job intelligence agent: Live Role, Proof, Signal.",
       },
     ],
     links: [

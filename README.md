@@ -1,5 +1,7 @@
 # Nuvra
 
+![Nuvra: Live Role, Proof, Signal](public/nuvra-og-banner.png)
+
 Nuvra is a no-login, proof-first job agent for high-agency builders. It reads
 live openings from the Speedrun Talent Network, lets a builder keep a private
 local profile, discovers roles from that profile, and produces evidence-grounded
@@ -58,6 +60,7 @@ Set these values in `.env` before starting the server:
 OPENROUTER_API_KEY=your_key_here
 OPENROUTER_MODEL=openai/gpt-4o-mini
 APP_URL=http://localhost:3000
+VITE_APP_URL=http://localhost:3000
 ```
 
 `OPENROUTER_API_KEY` is server-only. Do not add it to a `VITE_` variable, commit
@@ -145,9 +148,11 @@ src/start.ts                       Request error and CSRF middleware
 
 ## Deploy to Vercel
 
-Import this repository into Vercel, add `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and
-`APP_URL` in the project's environment variables, then deploy. Vercel Web Analytics is
-enabled automatically for deployed builds and does not need a browser-side API key.
+Import this repository into Vercel, add `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `APP_URL`, and
+`VITE_APP_URL` (for example, `https://nuvra.vercel.app`) in the project's environment variables,
+then deploy. `VITE_APP_URL` ensures that social crawlers receive an absolute URL for the Nuvra
+preview image. Vercel Web Analytics is enabled automatically for deployed builds and does not
+need a browser-side API key.
 
 ## License
 
