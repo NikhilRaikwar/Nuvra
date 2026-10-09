@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { TopNav } from "@/components/workstation/TopNav";
 import { useProfile, profileHash, profileIsReady, type Profile } from "@/lib/profile";
 import { generateApplication, type ApplicationDraft } from "@/lib/application.functions";
-import { generateProof, type GeneratedProofProject } from "@/lib/proof.functions";
+import { createProofRun, getProofRun, type ProofRunSnapshot } from "@/lib/proof-agent.functions";
 import { scoreRole, type FitReport } from "@/lib/scoring.functions";
 import { getJobDetail, type Job } from "@/lib/speedrun.functions";
 
@@ -182,13 +182,44 @@ function ClosedRole() {
 
 function RoleWorkspace({ job, profile }: { job: Job; profile: Profile }) {
   const score = useServerFn(scoreRole);
-  const proof = useServerFn(generateProof);
+  const startProofRun = useServerFn(createProofRun);
+  const loadProofRun = useServerFn(getProofRun);
+  const [proofRunId, setProofRunId] = useState<string | null>(null);
   const fitQuery = useQuery({
     queryKey: ["agent-fit", job.id, profileHash(profile)],
     queryFn: () => score({ data: { jobId: job.id, profile } }),
   });
   const proofMutation = useMutation({
-    mutationFn: () => proof({ data: { jobId: job.id, profile, gaps: fitQuery.data?.gaps || [] } }),
+    mutationFn: () =>
+      startProofRun({
+        data: {
+          opportunity: {
+            text: [
+              job.title,
+              job.stealth ? "Stealth" : job.company,
+              job.function,
+              job.seniority || "",
+              job.descriptionText || "",
+              ...(fitQuery.data?.gaps || []),
+            ].join("\n"),
+            url: job.canonicalUrl,
+            speedrunJobId: job.id,
+          },
+          profile,
+        },
+      }),
+    onSuccess: (result) => setProofRunId(result.runId),
+  });
+  const proofRunQuery = useQuery({
+    queryKey: ["role-proof-run", proofRunId],
+    queryFn: () => loadProofRun({ data: { runId: proofRunId || "" } }),
+    enabled: Boolean(proofRunId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && ["completed", "failed", "partial", "cancelled"].includes(status)
+        ? false
+        : 900;
+    },
   });
 
   return (
@@ -196,9 +227,9 @@ function RoleWorkspace({ job, profile }: { job: Job; profile: Profile }) {
       <div className="col-span-12 lg:col-span-7 space-y-7">
         <FitReportCard report={fitQuery.data} loading={fitQuery.isLoading} error={fitQuery.error} />
         <ProofCard
-          project={proofMutation.data}
-          loading={proofMutation.isPending}
-          error={proofMutation.error}
+          snapshot={proofRunQuery.data}
+          loading={proofMutation.isPending || proofRunQuery.isFetching}
+          error={proofMutation.error || proofRunQuery.error}
           onGenerate={() => proofMutation.mutate()}
           disabled={!fitQuery.data}
         />
@@ -310,32 +341,33 @@ function BulletBlock({
 }
 
 function ProofCard({
-  project,
+  snapshot,
   loading,
   error,
   onGenerate,
   disabled,
 }: {
-  project?: GeneratedProofProject;
+  snapshot?: ProofRunSnapshot;
   loading: boolean;
   error: Error | null;
   onGenerate: () => void;
   disabled: boolean;
 }) {
+  const packet = snapshot?.proofPacket;
   return (
     <section className="border border-ink/20 bg-cream-surface p-6 pr-fade-up">
       <div className="flex items-start justify-between gap-5 mb-4">
         <div>
           <p className="text-[10px] font-mono uppercase text-ink/45 tracking-widest mb-1">
-            02 / Proof project
+            02 / Proof compiler
           </p>
           <h2 className="text-xl font-semibold tracking-tight">
-            {project ? project.name : "Close the most important evidence gap"}
+            {packet ? "Proof packet compiled" : "Close the most important evidence gap"}
           </h2>
-          {project && <p className="text-sm italic text-ink/70 mt-1">{project.tagline}</p>}
-          {project?.source === "starter" && (
+          {snapshot && (
             <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-ink/45">
-              Starter brief / model unavailable
+              {snapshot.status} / {snapshot.currentStage} / {snapshot.traceEvents.length} trace
+              events
             </p>
           )}
         </div>
@@ -344,66 +376,60 @@ function ProofCard({
           disabled={disabled || loading}
           className="shrink-0 bg-ink text-cream-base px-4 py-2 text-xs font-medium hover:bg-accent transition-colors disabled:bg-ink/20"
         >
-          {loading ? "Generating..." : project ? "Regenerate" : "Generate brief"}
+          {loading ? "Compiling..." : snapshot ? "Recompile" : "Compile missing proof"}
         </button>
       </div>
       {disabled && !loading && (
         <p className="text-xs text-ink/55">
-          The proof brief unlocks after the agent completes the fit report.
+          The proof compiler unlocks after the agent completes the fit report.
         </p>
       )}
       {error && <AgentError error={error} />}
-      {project && <ProofProjectView project={project} />}
+      {snapshot && <ProofRunView snapshot={snapshot} />}
     </section>
   );
 }
 
-function ProofProjectView({ project }: { project: GeneratedProofProject }) {
+function ProofRunView({ snapshot }: { snapshot: ProofRunSnapshot }) {
+  const packet = snapshot.proofPacket;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs mt-6">
-      <MetaLine label="Problem" value={project.problem} />
-      <MetaLine label="User" value={project.user} />
-      <MetaLine label="Build time" value={project.buildTime} />
-      <MetaLine label="Tech" value={project.techStack.join(" / ")} mono />
-      <div className="md:col-span-2">
-        <p className="text-[10px] font-mono uppercase text-ink/40 tracking-widest mb-2">
-          Feature list
-        </p>
+      <div>
+        <p className="text-[10px] font-mono uppercase text-ink/40 tracking-widest mb-2">Trace</p>
         <ul className="space-y-1">
-          {project.features.map((feature) => (
-            <li key={feature}>
-              <span className="text-accent mr-2">+</span>
-              {feature}
+          {snapshot.traceEvents.slice(-6).map((event) => (
+            <li key={event.event_id} className="leading-relaxed">
+              <span className="text-accent mr-2">{event.status}</span>
+              {event.output_summary || event.action}
             </li>
           ))}
         </ul>
       </div>
-      <div className="md:col-span-2">
+      <div>
         <p className="text-[10px] font-mono uppercase text-ink/40 tracking-widest mb-2">
-          Demo flow
+          Claim court
         </p>
-        <ol className="space-y-1 list-decimal list-inside">
-          {project.demoFlow.map((step) => (
-            <li key={step} className="marker:text-ink/30">
-              {step}
+        <ul className="space-y-1">
+          {snapshot.verifiedClaims.slice(0, 4).map((claim) => (
+            <li key={claim.id} className="leading-relaxed">
+              <span className="text-accent mr-2">{claim.verdict}</span>
+              {claim.safe_wording}
             </li>
           ))}
-        </ol>
+        </ul>
       </div>
-      <CopyBlock label="README pitch" text={project.readmePitch} />
-      <CopyBlock label="Resume bullet" text={project.resumeBullet} />
-      <div className="md:col-span-2">
-        <CopyBlock label="Launch post" text={project.launchTweet} />
-      </div>
-    </div>
-  );
-}
-
-function MetaLine({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] font-mono uppercase text-ink/40 tracking-widest mb-1">{label}</p>
-      <p className={`text-xs text-ink/80 leading-relaxed ${mono ? "font-mono" : ""}`}>{value}</p>
+      {packet ? (
+        <>
+          <DraftBlock label="Proof objective" text={packet.proof_objective} />
+          <DraftBlock label="Acceptance tests" text={packet.acceptance_tests.join("\n")} />
+          <DraftBlock label="README draft" text={packet.readme_draft} />
+          <DraftBlock label="Resume bullet draft" text={packet.resume_bullet_draft} />
+        </>
+      ) : (
+        <div className="md:col-span-2 border border-border-dim bg-cream-base p-3 text-ink/55">
+          Waiting for the agent to finish the critic loop and compile the packet.
+        </div>
+      )}
     </div>
   );
 }
@@ -571,7 +597,7 @@ function DraftEvidence({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function CopyBlock({ label, text }: { label: string; text: string }) {
+function DraftBlock({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div>

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as ProofRouteImport } from './routes/proof'
 import { Route as RoleIdRouteImport } from './routes/role.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProofRoute = ProofRouteImport.update({
+  id: '/proof',
+  path: '/proof',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RoleIdRoute = RoleIdRouteImport.update({
   id: '/role/$id',
   path: '/role/$id',
@@ -32,30 +38,34 @@ const RoleIdRoute = RoleIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/proof': typeof ProofRoute
   '/role/$id': typeof RoleIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/proof': typeof ProofRoute
   '/role/$id': typeof RoleIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/proof': typeof ProofRoute
   '/role/$id': typeof RoleIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/role/$id'
+  fullPaths: '/' | '/app' | '/proof' | '/role/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/role/$id'
-  id: '__root__' | '/' | '/app' | '/role/$id'
+  to: '/' | '/app' | '/proof' | '/role/$id'
+  id: '__root__' | '/' | '/app' | '/proof' | '/role/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
+  ProofRoute: typeof ProofRoute
   RoleIdRoute: typeof RoleIdRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/proof': {
+      id: '/proof'
+      path: '/proof'
+      fullPath: '/proof'
+      preLoaderRoute: typeof ProofRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/role/$id': {
       id: '/role/$id'
       path: '/role/$id'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
+  ProofRoute: ProofRoute,
   RoleIdRoute: RoleIdRoute,
 }
 export const routeTree = rootRouteImport

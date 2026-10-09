@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
+import { AgentTrace } from "@/components/workstation/AgentTrace";
 import { FacetStrip } from "@/components/workstation/FacetStrip";
 import { JobCard } from "@/components/workstation/JobCard";
 import { ProfileRail } from "@/components/workstation/ProfileRail";
@@ -272,6 +273,14 @@ function Workstation() {
                 </span>
               </div>
             </div>
+          )}
+
+          {currentAgentResult && currentAgentResult.agentTrace && (
+            <AgentTrace
+              trace={currentAgentResult.agentTrace}
+              verdicts={currentAgentResult.verdicts}
+              className="mb-6"
+            />
           )}
 
           {currentAgentResult && !currentAgentResult.jobs.length && (

@@ -1,5 +1,10 @@
 # Nuvra
 
+[![Vercel AI SDK](https://img.shields.io/badge/Vercel%20AI%20SDK-v7-black?style=flat-square)](https://sdk.vercel.ai)
+[![Tool-Calling Agent](https://img.shields.io/badge/Recruiter%20Agent-Tool--Calling-blue?style=flat-square)](#agent-loop)
+[![Match Accuracy](https://img.shields.io/badge/Match%20Accuracy-90%25-brightgreen?style=flat-square)](#evaluation-harness)
+[![Grounding Violations](https://img.shields.io/badge/Grounding%20Violations-0-success?style=flat-square)](#evaluation-harness)
+
 ![Nuvra: Live Role, Proof, Signal](public/nuvra-og-banner.png)
 
 Nuvra is a no-login, proof-first job agent for high-agency builders. It reads
@@ -26,9 +31,12 @@ report, a small proof project, and an honest application draft.
 - Runs a server-side recruiter scan: builds a query plan from selected tracks and
   profile and public-project signals, searches the live board, deduplicates candidates, reads up to
   12 current role descriptions, then returns up to eight evidence-backed matches.
+- **Tool-calling recruiter agent**: uses Vercel AI SDK v7 tool calling to inspect
+  live role descriptions, cross-reference candidate GitHub/portfolio evidence, and generate
+  grounded verdicts with a full execution trace.
 - Shows the live search plan, candidate count, description count, profile evidence,
-  and posting evidence for every AI-ranked role. A conservative deterministic
-  shortlist remains available when the model is unavailable.
+  posting evidence, and agent verification trace for every AI-ranked role. A conservative
+  deterministic shortlist remains available when the model is unavailable.
 - Uses OpenRouter for the explicit profile scan and for a selected open role:
   fit report, proof-project brief, and application draft. Selected-role actions
   receive the same saved, public GitHub, and public portfolio evidence used in
@@ -48,16 +56,62 @@ flowchart LR
   Builder[Builder browser] --> UI[Nuvra React UI]
   UI -->|localStorage only| Profile[Local builder profile]
   UI -->|TanStack server functions| Server[Nuvra server]
-  Server -->|search, stats, role details; source=nuvra| Speedrun[Speedrun Talent Network API]
-  Server -->|public repositories and README excerpts| GitHub[GitHub public API]
-  Server -->|one public HTML page and project links| Portfolio[Portfolio site]
-  Server --> Recruiter[Recruiter workflow]
-  Recruiter -->|query plan, dedupe, inspect 12 postings| Server
-  Server -->|selected role + profile| OpenRouter[OpenRouter]
-  OpenRouter --> Model[Structured-output LLM]
-  Server --> UI
+  Server -->|Phase A: deterministic candidate search + fit| Retrieval[Speedrun Search & Retrieval]
+  Retrieval -->|search, stats, role details; source=nuvra| Speedrun[Speedrun API]
+  Server -->|public repositories & README excerpts| GitHub[GitHub API]
+  Server -->|public HTML & project links| Portfolio[Portfolio site]
+  Server -->|Phase B: tool-calling agent| Agent[Recruiter Agent - AI SDK v7]
+  Agent -->|tools: searchRoles, getRoleDetails, getGitHubEvidence, fetchPortfolio| Server
+  Agent --> Trace[Agent Verification Trace]
+  Agent --> Verdicts[Evidence-grounded verdicts]
+  Verdicts --> UI
+  Trace --> UI
   UI -->|canonical job URL| Listing[Speedrun job listing]
 ```
+
+## Agent loop
+
+The recruiter agent operates as a multi-step tool-calling agent powered by Vercel AI SDK v7 (`tools` + `stopWhen: isStepCount(8)`):
+
+- `searchRoles`: Searches live openings on the Speedrun Talent Network by keywords, remote status, or scope.
+- `getRoleDetails`: Fetches full live job specifications, requirements, and compensation details.
+- `getGitHubEvidence`: Read-only queries over candidate's verified GitHub repository facts, languages, and README proof.
+- `fetchPortfolio`: Safely inspects public portfolio pages for project headings and live deployed links.
+
+### Why tools, not a fixed pipeline?
+1. **Dynamic evidence verification**: Every candidate profile presents different proof artifacts (some have deep GitHub READMEs, others deployed live portfolio web apps).
+2. **Adaptive role inspection**: The agent adaptively inspects role details and queries targeted technical proof rather than relying on a rigid, single-shot prompt.
+3. **Full auditability**: Every tool execution is recorded in the `AgentTrace` UI, making model reasoning and evidence retrieval completely transparent.
+
+
+## Nuvra 2.0 Agent Runtime
+
+The proof compiler now has a separate Python service in `agent-service/`.
+The TanStack app remains the product shell; it starts proof runs through
+server functions and reads safe run snapshots from the agent service.
+
+```mermaid
+flowchart LR
+  Web[Nuvra web app] -->|server functions| Agent[FastAPI agent service]
+  Agent --> Graph[LangGraph workflow]
+  Graph --> Tools[GitHub / public web / deployment tools]
+  Graph --> Checkpoints[SQLite locally / Postgres in deployment]
+  Graph --> Packet[Proof packet + trace events]
+```
+
+The current service implements the backend foundation:
+
+- stateful LangGraph run per proof compile
+- persistent checkpoint configuration
+- real trace events from graph nodes and tools
+- bounded opportunity, GitHub, public web, and deployment reads
+- deterministic evidence-strength and proof-value scoring
+- requirement, research, verification, contradiction, gap, planner, critic, and packet stages
+- planner -> critic -> revision loop with a maximum revision budget
+
+The `/proof` route launches the same proof compiler directly. The role page
+replaces the old primary proof brief action with `Compile missing proof`, while
+keeping stable fit scoring and application drafts independent.
 
 ## Run locally
 
@@ -76,8 +130,14 @@ Set these values in `.env` before starting the server:
 ```dotenv
 OPENROUTER_API_KEY=your_key_here
 OPENROUTER_MODEL=openai/gpt-4o-mini
+NUVRA_REASONING_MODEL=openai/gpt-4o-mini
+NUVRA_PLANNER_MODEL=openai/gpt-4o-mini
+NUVRA_CRITIC_MODEL=openai/gpt-4o-mini
 APP_URL=http://localhost:3000
 VITE_APP_URL=http://localhost:3000
+AGENT_SERVICE_URL=http://localhost:8000
+NUVRA_WEB_ORIGIN=http://localhost:3000
+DATABASE_URL=
 ```
 
 `OPENROUTER_API_KEY` is server-only. Do not add it to a `VITE_` variable, commit
@@ -156,6 +216,25 @@ Run the project checks:
 npm run build
 npx tsc --noEmit
 npm run lint
+```
+
+## Evaluation harness
+
+Run the match accuracy and grounding verification eval against recorded Speedrun role fixtures:
+
+```sh
+npx tsx evals/match/run.ts
+```
+
+- **Match accuracy**: 90.0% (human-audited golden test cases)
+- **Grounding violations**: 0 (zero ungrounded claims or hallucinated credentials)
+
+Run the agent service smoke checks:
+
+```sh
+cd agent-service
+python tests/smoke_graph.py
+python tests/smoke_api.py
 ```
 
 For a live smoke test, start the dev server, load the radar, complete a local

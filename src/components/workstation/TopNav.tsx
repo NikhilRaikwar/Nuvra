@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-export function TopNav({ current }: { current: "radar" | "role" }) {
+export function TopNav({ current }: { current: "radar" | "role" | "proof" }) {
   return (
     <nav className="h-14 border-b border-border-dim flex items-center justify-between px-4 sm:px-6 bg-cream-base/90 backdrop-blur-sm sticky top-0 z-50">
       <div className="flex items-center gap-4 sm:gap-6 min-w-0">
@@ -18,6 +18,16 @@ export function TopNav({ current }: { current: "radar" | "role" }) {
           }
         >
           Live Radar
+        </Link>
+        <Link
+          to="/proof"
+          className={
+            current === "proof"
+              ? "text-xs font-medium text-ink"
+              : "text-xs font-medium text-ink/40 hover:text-ink transition-colors"
+          }
+        >
+          Proof Compiler
         </Link>
       </div>
       <a

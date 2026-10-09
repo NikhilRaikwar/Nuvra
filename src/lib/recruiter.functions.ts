@@ -1,9 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
-import { generateText, Output } from "ai";
+import { generateText, isStepCount } from "ai";
 import { z } from "zod";
-import { createOpenRouterGateway, DEFAULT_MODEL } from "./ai-gateway.server";
+import {
+  AI_OUTPUT_TOKEN_BUDGET,
+  createOpenRouterGateway,
+  DEFAULT_MODEL,
+} from "./ai-gateway.server";
 import { calculateEvidenceFit, TARGET_ROLE_TRACKS, type StableEvidenceFit } from "./evidence-fit";
 import { loadProfileEvidence, type AgentProfile } from "./profile-evidence.server";
+import { createRecruiterTools } from "./recruiter-tools";
 import type { ShortlistSignal } from "./shortlist.functions";
 import { loadSpeedrunJob, searchSpeedrunJobs, type Job } from "./speedrun.functions";
 
@@ -25,9 +30,17 @@ const Input = z.object({
     .default({}),
 });
 
-const RecruiterSummarySchema = z.object({
-  summary: z.string().min(20).max(420),
-});
+export type AgentTraceStep = {
+  tool: string;
+  argsSummary: string;
+  resultSummary: string;
+};
+
+export type RoleVerdict = {
+  jobId: string;
+  verdict: "Strong" | "Worth a look" | "Stretch" | "Skip" | string;
+  reason: string;
+};
 
 export type RecruiterResult = {
   jobs: Job[];
@@ -42,6 +55,8 @@ export type RecruiterResult = {
     scope: "portfolio" | "everywhere";
     remoteOnly: boolean;
   };
+  agentTrace?: AgentTraceStep[];
+  verdicts?: RoleVerdict[];
 };
 
 type Candidate = {
@@ -124,6 +139,58 @@ function deterministicSummary(candidates: Candidate[], targetRoles: string[]) {
     )}. Add stronger proof, choose another selected track, or scan again after the board refreshes.`;
   }
   return `Shortlisted ${candidates.length} live Speedrun role${candidates.length === 1 ? "" : "s"} only from the selected tracks. Scores use saved profile evidence and the current job description; they do not change when a draft is generated.`;
+}
+
+function parseRoleVerdicts(text: string, shortlisted: Candidate[]): RoleVerdict[] {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return shortlisted.map((candidate) => {
+    const id = candidate.job.id;
+    const titleNorm = candidate.job.title.toLowerCase();
+    const companyNorm = candidate.job.company.toLowerCase();
+
+    const relevantLine = lines.find((line) => {
+      const lower = line.toLowerCase();
+      return (
+        lower.includes(id.toLowerCase()) ||
+        lower.includes(titleNorm) ||
+        (!candidate.job.stealth && lower.includes(companyNorm))
+      );
+    });
+
+    let verdict: RoleVerdict["verdict"] =
+      candidate.fit.verdict === "Apply Now"
+        ? "Strong"
+        : candidate.fit.verdict === "Build Proof First"
+          ? "Worth a look"
+          : "Skip";
+    let reason =
+      candidate.fit.profileEvidence && candidate.fit.roleEvidence
+        ? `Candidate fact: "${candidate.fit.profileEvidence}". Role fact: "${candidate.fit.roleEvidence}".`
+        : `Verified track match: ${candidate.fit.matchedTracks.join(", ")}.`;
+
+    if (relevantLine) {
+      if (/\b(strong|top fit|apply now)\b/i.test(relevantLine)) {
+        verdict = "Strong";
+      } else if (/\b(worth a look|good fit|promising)\b/i.test(relevantLine)) {
+        verdict = "Worth a look";
+      } else if (/\b(stretch|reach)\b/i.test(relevantLine)) {
+        verdict = "Stretch";
+      } else if (/\b(skip|pass|mismatch)\b/i.test(relevantLine)) {
+        verdict = "Skip";
+      }
+      reason = relevantLine.replace(/^[-*•0-9.)\s]+/, "").trim();
+    }
+
+    return {
+      jobId: id,
+      verdict,
+      reason,
+    };
+  });
 }
 
 export const recruitLiveRoles = createServerFn({ method: "POST" })
@@ -214,34 +281,77 @@ export const recruitLiveRoles = createServerFn({ method: "POST" })
     try {
       const gateway = createOpenRouterGateway();
       const model = gateway(DEFAULT_MODEL);
-      const { output } = await generateText({
+      const tools = createRecruiterTools({
+        profile: data.profile,
+        facts: evidence.facts,
+      });
+
+      const { text, steps } = await generateText({
         model,
-        output: Output.object({ schema: RecruiterSummarySchema }),
-        maxOutputTokens: 180,
+        tools,
+        stopWhen: isStepCount(8),
+        maxOutputTokens: AI_OUTPUT_TOKEN_BUDGET.fitReport,
         system: [
-          "You are Nuvra's technical recruiter. Summarize an already-ranked live shortlist.",
-          "Do not change the ranking, score, verdict, or claim unprovided experience.",
-          "Be direct about seniority and domain gaps. Keep the summary under 70 words.",
+          "You are Nuvra's recruiter agent. Verify the shortlisted roles with tools before judging.",
+          "For each role: confirm the description supports the fit (getRoleDetails), cross-check claimed skills against GitHub evidence (getGitHubEvidence).",
+          "Output: verdict per role (Strong/Worth a look/Stretch/Skip) with one evidence-backed reason each.",
+          "Rules: never invent experience. Every reason cites a candidate fact AND a role fact. Be direct about seniority gaps.",
         ].join(" "),
-        prompt: `Selected tracks: ${data.profile.targetRoles.join(", ")}\n\nProfile evidence facts:\n${evidence.facts
+        prompt: `Profile facts:\n${evidence.facts
           .map((fact) => `- ${fact}`)
-          .join("\n")}\n\nAlready-ranked live Speedrun roles:\n${JSON.stringify(
-          shortlisted.map(({ job, fit }) => ({
-            title: job.title,
-            company: job.stealth ? "Stealth" : job.company,
-            evidenceScore: fit.score,
-            sharedTerms: fit.sharedTerms,
-            seniorityGap: fit.seniorityGap,
+          .join("\n")}\n\nShortlisted roles:\n${JSON.stringify(
+          shortlisted.map((c) => ({
+            id: c.job.id,
+            title: c.job.title,
+            company: c.job.stealth ? "Stealth" : c.job.company,
+            evidenceScore: c.fit.score,
           })),
         )}`,
       });
-      return { ...baseResult, summary: completeSummary(output.summary), source: "ai" };
+
+      const agentTrace: AgentTraceStep[] = steps.flatMap((step) =>
+        (step.toolCalls || []).map((toolCall) => {
+          const matchResult = step.toolResults?.find((tr) => tr.toolCallId === toolCall.toolCallId);
+          const rawResult = matchResult ? matchResult.output : "";
+          const resultStr =
+            typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult ?? "");
+          return {
+            tool: toolCall.toolName,
+            argsSummary: JSON.stringify(toolCall.input || {}).slice(0, 160),
+            resultSummary: resultStr.slice(0, 200),
+          };
+        }),
+      );
+
+      const verdicts = parseRoleVerdicts(text, shortlisted);
+
+      return {
+        ...baseResult,
+        summary: completeSummary(text),
+        source: "ai",
+        agentTrace,
+        verdicts,
+      };
     } catch (error) {
-      console.warn("Recruiter summary unavailable; keeping deterministic live shortlist.", error);
+      console.warn("Recruiter agent unavailable; keeping deterministic live shortlist.", error);
       return {
         ...baseResult,
         summary: deterministicSummary(shortlisted, data.profile.targetRoles),
         source: "deterministic",
+        agentTrace: [],
+        verdicts: shortlisted.map((c) => ({
+          jobId: c.job.id,
+          verdict:
+            c.fit.verdict === "Apply Now"
+              ? "Strong"
+              : c.fit.verdict === "Build Proof First"
+                ? "Worth a look"
+                : "Skip",
+          reason:
+            c.fit.profileEvidence && c.fit.roleEvidence
+              ? `Candidate fact: "${c.fit.profileEvidence}". Role fact: "${c.fit.roleEvidence}".`
+              : "Deterministic fit from verified track match and skill overlap.",
+        })),
       };
     }
   });
