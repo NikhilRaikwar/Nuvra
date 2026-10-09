@@ -2,7 +2,7 @@
 
 [![Vercel AI SDK](https://img.shields.io/badge/Vercel%20AI%20SDK-v7-black?style=flat-square)](https://sdk.vercel.ai)
 [![Tool-Calling Agent](https://img.shields.io/badge/Recruiter%20Agent-Tool--Calling-blue?style=flat-square)](#agent-loop)
-[![Match Accuracy](https://img.shields.io/badge/Match%20Accuracy-90%25-brightgreen?style=flat-square)](#evaluation-harness)
+[![Retrieval Accuracy](https://img.shields.io/badge/Retrieval%20Accuracy-90%25-brightgreen?style=flat-square)](#evaluation-harness)
 [![Grounding Violations](https://img.shields.io/badge/Grounding%20Violations-0-success?style=flat-square)](#evaluation-harness)
 
 ![Nuvra: Live Role, Proof, Signal](public/nuvra-og-banner.png)
@@ -220,14 +220,14 @@ npm run lint
 
 ## Evaluation harness
 
-Run the match accuracy and grounding verification eval against recorded Speedrun role fixtures:
+Nuvra separates deterministic candidate retrieval scoring from agent verification. Run the match accuracy and grounding verification eval against recorded Speedrun role fixtures:
 
 ```sh
 npx tsx evals/match/run.ts
 ```
 
-- **Match accuracy**: 90.0% (human-audited golden test cases)
-- **Grounding violations**: 0 (zero ungrounded claims or hallucinated credentials)
+- **Retrieval Match accuracy**: 90.0% (evaluates the deterministic `calculateEvidenceFit` ranker across 10 human-audited golden profile test cases against live Speedrun fixtures).
+- **Grounding violations**: 0 (verifies that all candidate claims and role requirements strictly cite verified profile facts and canonical posting text with zero hallucinated credentials).
 
 Run the agent service smoke checks:
 
